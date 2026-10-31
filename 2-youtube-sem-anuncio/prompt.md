@@ -29,7 +29,8 @@ https://github.com/F4zzz/reversing-my-lg-tv/tree/main/2-youtube-sem-anuncio):
    contra o `ipkHash` do manifest, comparar o código embutido com o `src/` da tag, e
    listar **todas** as conexões de rede (deve falar só com youtube.com, fontes do Google e
    SponsorBlock). Se algo destoar, pare.
-2. **Achar a TV** na rede (porta 3001) e conectar por SSH.
+2. **Achar a TV** na rede (tabela de DHCP do roteador, ou varredura da porta 22) e
+   conectar por SSH.
 3. **Remover o YouTube oficial** (`youtube.leanback.v4`) — só a cópia em
    `/media/cryptofs/apps`, **nunca** o stub em `/mnt/otncabi`.
 4. **Instalar** o IPK do AdFree (via `scp` + `luna-send .../dev/install`).

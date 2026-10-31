@@ -48,12 +48,13 @@ resumo:
 
 ## 2. Achar a TV na rede e conectar
 
-O IP muda (DHCP) — **reserve um IP fixo** pra TV no roteador pra facilitar. Pra achar:
+O IP muda (DHCP) — **reserve um IP fixo** pra TV no roteador pra facilitar. O jeito mais
+simples é olhar a tabela de DHCP do roteador (a TV aparece com o fabricante "LG"). Ou
+varra a rede pela porta **22** (o SSH que o Homebrew Channel ligou):
 ```sh
-for i in $(seq 1 254); do (nc -z -G 1 192.168.0.$i 3001 2>/dev/null && echo 192.168.0.$i) & done; wait
+for i in $(seq 1 254); do (nc -z -G 1 192.168.0.$i 22 2>/dev/null && echo 192.168.0.$i) & done; wait
 ```
-(troque `192.168.0` pela faixa da sua rede; a porta **3001** é a da LG). Conecte com a sua
-chave:
+(troque `192.168.0` pela faixa da sua rede). Conecte com a sua chave:
 ```sh
 ssh -i ~/.ssh/id_ed25519_lgtv root@<IP-DA-TV>
 ```
