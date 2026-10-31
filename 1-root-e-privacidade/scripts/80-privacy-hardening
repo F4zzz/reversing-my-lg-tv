@@ -1,0 +1,86 @@
+#!/bin/sh
+# 80-privacy-hardening
+# Roda a cada boot via run-parts (chamado pelo startup.sh do Homebrew Channel).
+# Objetivo: garantir privacidade mesmo que algo tente reativar.
+#   1) bloqueia no /etc/hosts os dominios de telemetria/ACR/anuncios/IoT da LG
+#   2) encerra acr2/homekit/airplay se estiverem rodando
+# Reversivel: basta apagar este arquivo. Nao toca no rootfs (somente /etc/hosts
+# via bind-mount em /tmp, que e tmpfs). Rapido e nunca trava o boot (sai 0).
+#
+# v2 (2026-10-23): no boot o sistema ainda monta/recria o /etc/hosts depois
+# deste script rodar, e o bloqueio se perdia silenciosamente (verificado: o
+# boot terminava com 2 entradas no /etc/hosts em vez de 38). Agora aplica,
+# confere, e reaplica algumas vezes em background.
+
+# Dominios a bloquear. NAO inclui Content Store/instalacao de apps
+# (lgtvsdp.com, lgappstv.com), voz, nem AWS, para nao quebrar streaming.
+DOMAINS="
+nextlgsdp.com ibs.nextlgsdp.com ibsstat.nextlgsdp.com rdx2.nextlgsdp.com
+lgtvcommon.com nudge.lgtvcommon.com homeprv.lgtvcommon.com wiseconfig.lgtvcommon.com
+pnv.lgtvcommon.com recommend.lgtvcommon.com cdpsvc.lgtvcommon.com cpauth.lgtvcommon.com
+cdpbeacon.lgtvcommon.com rdl.lgtvcommon.com wiseresource.lgtvcommon.com qcardservice.lgtvcommon.com
+lggalleryplus.com tv.wiselg.com
+lgsmartad.com info.lgsmartad.com
+ngfts.lge.com qt2-ngfts.lge.com kic-ngfts.lge.com kic-qt2-ngfts.lge.com
+lgtviot.com api.lgtviot.com commonpush.lgtviot.com sports.lgtviot.com ocp.lgtviot.com push.lgtviot.com buddy.lgtviot.com
+lgthinq.com common.lgthinq.com connect-client.lgthinq.com
+nsu.lge.com snu-dev.lge.com
+"
+
+MARK="# privacy-hardening (custom)"
+LOG=/tmp/privacy-hardening.log
+
+# --- 1) bloqueio de rede via /etc/hosts ---
+apply_hosts() {
+    [ -f /etc/hosts ] || return 1
+
+    # Garante que /etc/hosts seja gravavel (bind-mount de um arquivo em /tmp).
+    if ! mount | grep -q " /etc/hosts "; then
+        cp -f /etc/hosts /tmp/hosts 2>/dev/null
+        mount --bind /tmp/hosts /etc/hosts 2>/dev/null
+    fi
+
+    # Idempotente: so adiciona se ainda nao tiver nossa marca neste boot.
+    if ! grep -q "$MARK" /etc/hosts 2>/dev/null; then
+        {
+            echo ""
+            echo "$MARK"
+            for d in $DOMAINS; do
+                echo "127.0.0.1 $d"
+                echo "::1 $d"
+            done
+        } >> /etc/hosts 2>/dev/null
+    fi
+
+    # Confere de verdade: 1 marca + 2 linhas por dominio.
+    grep -q "$MARK" /etc/hosts 2>/dev/null &&
+        [ "$(grep -c '^127.0.0.1' /etc/hosts 2>/dev/null)" -ge 38 ]
+}
+
+# --- 2) encerra daemons de ACR/AirPlay/HomeKit se presentes ---
+# (ls-hubd pode relancar sob demanda, mas o bloqueio acima impede phone-home.)
+stop_daemons() {
+    for proc in acr2 homekit airplay; do
+        pid=$(pidof "$proc" 2>/dev/null)
+        [ -n "$pid" ] && kill $pid 2>/dev/null
+    done
+}
+
+apply_hosts
+stop_daemons
+
+# O sistema pode remontar/recriar o /etc/hosts durante o boot. Reaplica em
+# background (nao atrasa o boot) e deixa rastro em $LOG.
+(
+    for d in 10 30 60 120; do
+        sleep $d
+        if apply_hosts; then
+            echo "$(date) ok: $(grep -c '^127.0.0.1' /etc/hosts) entradas" >> "$LOG"
+            exit 0
+        fi
+        echo "$(date) reaplicando (tentativa pos $d s)" >> "$LOG"
+    done
+    echo "$(date) FALHOU: $(grep -c '^127.0.0.1' /etc/hosts) entradas" >> "$LOG"
+) &
+
+exit 0

@@ -1,0 +1,10 @@
+# artefatos de build do rebrand
+2-youtube-sem-anuncio/tools/build/
+
+# marca registrada: nunca commitar o logo do YouTube (cada um baixa o seu)
+2-youtube-sem-anuncio/tools/youtube-logo.svg
+
+# IPKs e pacotes
+*.ipk
+
+.DS_Store

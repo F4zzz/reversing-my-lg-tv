@@ -1,0 +1,44 @@
+#!/bin/sh
+# 85-no-netflix-preload
+# Roda a cada boot via run-parts (startup.sh do Homebrew Channel).
+#
+# Motivo: esta TV (863 MB de RAM) sobe com o Netflix PRE-CARREGADO pelo
+# webos-preload-manager ("Quick Start+"). Medido no aparelho: netflix.bin
+# ocupa ~65 MB de PSS permanentes, com o dono assistindo YouTube.
+#
+# O que faz: bind-monta uma copia do JSON de configuracao do preloadmanager
+# (em /tmp, tmpfs) com "isEnabled": false apenas no bloco do netflix.
+# O app continua instalado e abre normalmente sob demanda - so deixa de
+# ficar residente o tempo todo.
+#
+# Reversivel: apagar este arquivo e reiniciar.
+# Nao toca no rootfs (overlay RO). Nao trava o boot: sempre sai 0.
+
+SRC=/etc/configd/layers/distro/hd1080-lite/com.webos.service.preloadmanager.json
+TMP=/tmp/preloadmanager-nonetflix.json
+
+apply() {
+    [ -f "$SRC" ] || return 1
+    awk '
+        /"id"[ \t]*:[ \t]*"netflix"/ { innf = 1 }
+        innf && /"isEnabled"[ \t]*:/ { sub(/: *true/, ": false"); innf = 0 }
+        { print }
+    ' "$SRC" > "$TMP" 2>/dev/null || return 1
+    [ -s "$TMP" ] || return 1
+    # se ja esta montado com o nosso conteudo, nada a fazer
+    if grep -A6 '"id" : "netflix"' "$SRC" 2>/dev/null | grep -q '"isEnabled" : false'; then
+        return 0
+    fi
+    mount --bind "$TMP" "$SRC" 2>/dev/null
+    grep -A6 '"id" : "netflix"' "$SRC" 2>/dev/null | grep -q '"isEnabled" : false'
+}
+
+# cedo no boot o /etc pode ainda nao estar pronto: tenta algumas vezes
+i=0
+while [ $i -lt 6 ]; do
+    apply && break
+    i=$((i + 1))
+    sleep 5
+done
+
+exit 0
